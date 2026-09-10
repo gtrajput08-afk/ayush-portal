@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { User } from "@/models/User";
 import { SkillAssessment } from "@/models/SkillAssessment";
@@ -6,25 +6,44 @@ import { CandidateEvaluation } from "@/models/CandidateEvaluation";
 import { DigitalPortfolio } from "@/models/DigitalPortfolio";
 import { getAuthUser } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const authUser = getAuthUser(request);
     if (!authUser || (authUser.role !== "academician" && authUser.role !== "industry")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      return NextResponse.json({ error: "Unauthorized access" }, { status: 403 });
     }
 
     await connectToDatabase();
+    const { searchParams } = new URL(request.url);
 
-    const students = await User.find({ role: "student" }).select("name email stream institution isVerified createdAt");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const skip = (page - 1) * limit;
+
+    const [totalStudents, students] = await Promise.all([
+      User.countDocuments({ role: "student" }),
+      User.find({ role: "student" })
+        .select("name email stream institution isVerified createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
 
     const enrichedStudents = await Promise.all(
       students.map(async (student) => {
-        const latestAssessment = await SkillAssessment.findOne({ studentId: student._id }).sort({ createdAt: -1 });
+        const latestAssessment = await SkillAssessment.findOne({ studentId: student._id }).sort({
+          createdAt: -1,
+        });
         const portfolio = await DigitalPortfolio.findOne({ studentId: student._id });
         const evaluations = await CandidateEvaluation.find({ studentId: student._id });
 
         const avgScore = latestAssessment ? latestAssessment.percentage : 65;
-        const readiness = Math.min(100, Math.round(avgScore * 0.8 + (evaluations.length > 0 ? 15 : 5)));
+        const readiness = Math.min(
+          100,
+          Math.round(avgScore * 0.8 + (evaluations.length > 0 ? 15 : 5))
+        );
 
         return {
           id: student._id,
@@ -45,13 +64,14 @@ export async function GET(request: NextRequest) {
     );
 
     // Stream-wise employability statistics
-    const streamStats: Record<string, { total: number; avgReadiness: number; totalScore: number }> = {
-      Ayurveda: { total: 0, avgReadiness: 0, totalScore: 0 },
-      Yoga: { total: 0, avgReadiness: 0, totalScore: 0 },
-      Unani: { total: 0, avgReadiness: 0, totalScore: 0 },
-      Siddha: { total: 0, avgReadiness: 0, totalScore: 0 },
-      Homeopathy: { total: 0, avgReadiness: 0, totalScore: 0 },
-    };
+    const streamStats: Record<string, { total: number; avgReadiness: number; totalScore: number }> =
+      {
+        Ayurveda: { total: 0, avgReadiness: 0, totalScore: 0 },
+        Yoga: { total: 0, avgReadiness: 0, totalScore: 0 },
+        Unani: { total: 0, avgReadiness: 0, totalScore: 0 },
+        Siddha: { total: 0, avgReadiness: 0, totalScore: 0 },
+        Homeopathy: { total: 0, avgReadiness: 0, totalScore: 0 },
+      };
 
     enrichedStudents.forEach((s) => {
       const st = s.stream || "Ayurveda";
@@ -64,16 +84,27 @@ export async function GET(request: NextRequest) {
 
     Object.keys(streamStats).forEach((key) => {
       if (streamStats[key].total > 0) {
-        streamStats[key].avgReadiness = Math.round(streamStats[key].totalScore / streamStats[key].total);
+        streamStats[key].avgReadiness = Math.round(
+          streamStats[key].totalScore / streamStats[key].total
+        );
       } else {
         streamStats[key].avgReadiness = 75; // baseline
       }
     });
 
+    const totalPages = Math.ceil(totalStudents / limit);
+
     return NextResponse.json({
       students: enrichedStudents,
       streamStats,
-      totalStudents: enrichedStudents.length,
+      totalStudents,
+      pagination: {
+        total: totalStudents,
+        page,
+        limit,
+        totalPages,
+        hasMore: page < totalPages,
+      },
     });
   } catch (error: any) {
     console.error("Fetch academician students error:", error);

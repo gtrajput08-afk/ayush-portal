@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
-import { Search, Filter, Building, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
+import { Search, Filter, Building, MapPin, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface InternshipSectionProps {
   userStream?: string;
@@ -9,6 +9,14 @@ interface InternshipSectionProps {
 
 export default function InternshipSection({ userStream }: InternshipSectionProps) {
   const [internships, setInternships] = useState<any[]>([]);
+  const [pagination, setPagination] = useState<{ total: number; page: number; totalPages: number; limit: number; hasMore: boolean }>({
+    total: 0,
+    page: 1,
+    totalPages: 1,
+    limit: 20,
+    hasMore: false,
+  });
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [internshipStreamFilter, setInternshipStreamFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -17,25 +25,34 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
   const [selectedInternship, setSelectedInternship] = useState<any>(null);
   const [coverNote, setCoverNote] = useState("");
   const [applyStatus, setApplyStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadInternships() {
+      setLoading(true);
       try {
         const queryParams = new URLSearchParams();
         if (internshipStreamFilter !== "All") queryParams.append("stream", internshipStreamFilter);
         if (searchQuery) queryParams.append("query", searchQuery);
+        queryParams.append("page", currentPage.toString());
+        queryParams.append("limit", "20");
 
         const res = await fetch(`/api/internships?${queryParams.toString()}`);
         if (res.ok) {
           const data = await res.json();
           setInternships(data.internships || []);
+          if (data.pagination) {
+            setPagination(data.pagination);
+          }
         }
       } catch (err) {
         console.error("Internships load error:", err);
+      } finally {
+        setLoading(false);
       }
     }
     loadInternships();
-  }, [internshipStreamFilter, searchQuery]);
+  }, [internshipStreamFilter, searchQuery, currentPage]);
 
   const handleApply = async () => {
     if (!selectedInternship) return;
@@ -53,7 +70,10 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
 
       if (res.ok) {
         setAppliedMap((prev) => ({ ...prev, [selectedInternship._id]: true }));
-        setApplyStatus({ success: true, message: "Application submitted successfully! Your verified portfolio and test scores have been shared." });
+        setApplyStatus({
+          success: true,
+          message: "Application submitted successfully! Your verified portfolio and test scores have been shared.",
+        });
       } else {
         setApplyStatus({ success: false, message: data.error || "Failed to submit application." });
       }
@@ -72,7 +92,10 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Search by title, required skills, or location..."
             className="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-ayush-green"
           />
@@ -82,7 +105,10 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
           <Filter className="w-4 h-4 text-gray-500" />
           <select
             value={internshipStreamFilter}
-            onChange={(e) => setInternshipStreamFilter(e.target.value)}
+            onChange={(e) => {
+              setInternshipStreamFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             className="text-xs font-bold px-3 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-ayush-green"
           >
             <option value="All">All AYUSH Streams</option>
@@ -95,74 +121,127 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {internships.map((job) => (
-          <div
-            key={job._id}
-            className="bg-white p-6 rounded-2xl border border-gray-200 hover:border-ayush-green shadow-sm hover:shadow-md transition-all space-y-4 flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-ayush-green-light text-ayush-green border border-ayush-green/30">
-                  {job.stream}
-                </span>
-                <span className="text-xs font-semibold text-gray-500">
-                  {job.type} • {job.duration}
-                </span>
-              </div>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white p-6 rounded-2xl border border-gray-200 h-64 animate-pulse"></div>
+          ))}
+        </div>
+      ) : internships.length > 0 ? (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center text-xs font-bold text-gray-500 px-1">
+            <span>Showing {internships.length} of {pagination.total} opportunities</span>
+            <span>Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
+          </div>
 
-              <h3 className="text-base font-bold text-ayush-dark">{job.title}</h3>
-              
-              <div className="flex items-center space-x-3 text-xs text-gray-500">
-                <span className="flex items-center space-x-1">
-                  <Building className="w-3.5 h-3.5" />
-                  <span>{job.postedBy?.institution || "AYUSH Organization"}</span>
-                </span>
-                <span className="flex items-center space-x-1">
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>{job.location?.district}, {job.location?.state}</span>
-                </span>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {internships.map((job) => (
+              <div
+                key={job._id}
+                className="bg-white p-6 rounded-2xl border border-gray-200 hover:border-ayush-green shadow-sm hover:shadow-md transition-all space-y-4 flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-ayush-green-light text-ayush-green border border-ayush-green/30">
+                      {job.stream}
+                    </span>
+                    <span className="text-xs font-semibold text-gray-500">
+                      {job.type} • {job.duration}
+                    </span>
+                  </div>
 
-              <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed">
-                {job.description}
-              </p>
+                  <h3 className="text-base font-bold text-ayush-dark">{job.title}</h3>
 
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {job.requiredSkills?.map((skill: string, sIdx: number) => (
-                  <span key={sIdx} className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
+                  <div className="flex items-center space-x-3 text-xs text-gray-500">
+                    <span className="flex items-center space-x-1">
+                      <Building className="w-3.5 h-3.5" />
+                      <span>{job.postedBy?.institution || "AYUSH Organization"}</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>
+                        {job.location?.district}, {job.location?.state}
+                      </span>
+                    </span>
+                  </div>
 
-            <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-gray-400">Stipend</p>
-                <p className="text-xs font-bold text-ayush-orange">{job.stipend}</p>
+                  <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed">
+                    {job.description}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {job.requiredSkills?.map((skill: string, sIdx: number) => (
+                      <span
+                        key={sIdx}
+                        className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-gray-400">Stipend</p>
+                    <p className="text-xs font-bold text-ayush-orange">{job.stipend}</p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedInternship(job);
+                      setCoverNote(
+                        `I am excited to apply for ${job.title}. My background in ${userStream || "AYUSH"} and certified skills make me an ideal candidate.`
+                      );
+                      setApplyStatus(null);
+                      setApplyModalOpen(true);
+                    }}
+                    disabled={appliedMap[job._id]}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow ${
+                      appliedMap[job._id]
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default"
+                        : "bg-ayush-green text-white hover:bg-ayush-green-dark"
+                    }`}
+                  >
+                    {appliedMap[job._id] ? "✓ Applied" : "Apply Now"}
+                  </button>
+                </div>
               </div>
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center space-x-3 pt-4">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center space-x-1"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+
+              <span className="text-xs font-bold text-gray-600">
+                Page {currentPage} of {pagination.totalPages}
+              </span>
 
               <button
-                onClick={() => {
-                  setSelectedInternship(job);
-                  setCoverNote(`I am excited to apply for ${job.title}. My background in ${userStream || "AYUSH"} and certified skills make me an ideal candidate.`);
-                  setApplyStatus(null);
-                  setApplyModalOpen(true);
-                }}
-                disabled={appliedMap[job._id]}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow ${
-                  appliedMap[job._id]
-                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default"
-                    : "bg-ayush-green text-white hover:bg-ayush-green-dark"
-                }`}
+                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={!pagination.hasMore}
+                className="px-3 py-1.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center space-x-1"
               >
-                {appliedMap[job._id] ? "✓ Applied" : "Apply Now"}
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white p-12 rounded-2xl border border-gray-200 text-center text-xs text-gray-500">
+          No active opportunities match your filter.
+        </div>
+      )}
 
       {applyModalOpen && selectedInternship && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -173,16 +252,28 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
                   Apply for Position
                 </span>
                 <h3 className="text-lg font-bold text-ayush-dark mt-1">{selectedInternship.title}</h3>
-                <p className="text-xs text-gray-500">{selectedInternship.postedBy?.institution} • {selectedInternship.location?.district}</p>
+                <p className="text-xs text-gray-500">
+                  {selectedInternship.postedBy?.institution} • {selectedInternship.location?.district}
+                </p>
               </div>
-              <button onClick={() => setApplyModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-700">✕</button>
+              <button onClick={() => setApplyModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-700">
+                ✕
+              </button>
             </div>
 
             {applyStatus && (
-              <div className={`p-3.5 rounded-xl text-xs flex items-center space-x-2 ${
-                applyStatus.success ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
-              }`}>
-                {applyStatus.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
+              <div
+                className={`p-3.5 rounded-xl text-xs flex items-center space-x-2 ${
+                  applyStatus.success
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
+                }`}
+              >
+                {applyStatus.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                )}
                 <span>{applyStatus.message}</span>
               </div>
             )}
@@ -202,12 +293,24 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
 
                 <div className="p-3 rounded-xl bg-ayush-sand border border-ayush-green/20 text-[11px] text-gray-600 space-y-1">
                   <p className="font-bold text-ayush-green">✓ Digital Portfolio Verified Badges Attached</p>
-                  <p>Your assessment scores, Schedule T certificates, and student projects will be transmitted directly to the hiring mentor.</p>
+                  <p>
+                    Your assessment scores, Schedule T certificates, and student projects will be transmitted
+                    directly to the hiring mentor.
+                  </p>
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-2">
-                  <button onClick={() => setApplyModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold border border-gray-300 hover:bg-gray-100 text-gray-700">Cancel</button>
-                  <button onClick={handleApply} disabled={applyingId !== null} className="px-5 py-2 rounded-xl bg-ayush-green hover:bg-ayush-green-dark text-white font-bold text-xs shadow disabled:opacity-50">
+                  <button
+                    onClick={() => setApplyModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold border border-gray-300 hover:bg-gray-100 text-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleApply}
+                    disabled={applyingId !== null}
+                    className="px-5 py-2 rounded-xl bg-ayush-green hover:bg-ayush-green-dark text-white font-bold text-xs shadow disabled:opacity-50"
+                  >
                     {applyingId !== null ? "Submitting..." : "Submit Application"}
                   </button>
                 </div>
@@ -216,7 +319,12 @@ export default function InternshipSection({ userStream }: InternshipSectionProps
 
             {applyStatus?.success && (
               <div className="text-center pt-2">
-                <button onClick={() => setApplyModalOpen(false)} className="px-6 py-2.5 rounded-xl bg-ayush-green text-white font-bold text-xs shadow hover:bg-ayush-green-dark">Close & View Applications</button>
+                <button
+                  onClick={() => setApplyModalOpen(false)}
+                  className="px-6 py-2.5 rounded-xl bg-ayush-green text-white font-bold text-xs shadow hover:bg-ayush-green-dark"
+                >
+                  Close & View Applications
+                </button>
               </div>
             )}
           </div>

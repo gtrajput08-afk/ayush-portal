@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IUser extends Document {
   _id: mongoose.Types.ObjectId;
@@ -20,12 +20,13 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     passwordHash: { type: String, required: true },
     role: {
       type: String,
       required: true,
       enum: ["student", "academician", "industry"],
+      index: true,
     },
     stream: {
       type: String,
@@ -49,6 +50,11 @@ const UserSchema = new Schema<IUser>(
   },
   { timestamps: true }
 );
+
+// Compound Indexes for fast querying & scalability
+UserSchema.index({ role: 1, stream: 1 });
+UserSchema.index({ role: 1, mentorType: 1 });
+UserSchema.index({ createdAt: -1 });
 
 export const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

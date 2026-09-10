@@ -1,12 +1,33 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { User } from "@/models/User";
 import { LoginSchema } from "@/lib/validations";
 import { signToken } from "@/lib/jwt";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import bcrypt from "bcryptjs";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request.headers);
+    const rateLimit = checkRateLimit(`login:${clientIp}`, 5, 15 * 60 * 1000);
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many login attempts from this IP. Please try again after ${rateLimit.retryAfterSeconds} seconds.`,
+          retryAfter: rateLimit.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": rateLimit.retryAfterSeconds.toString(),
+          },
+        }
+      );
+    }
+
     await connectToDatabase();
     const body = await request.json();
 

@@ -7,7 +7,9 @@ import { SkillAssessment } from "@/models/SkillAssessment";
 import { ApplicationStatusSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
 
-// GET /api/internships/[id]/applicants - fetch applicants for an internship
+export const dynamic = "force-dynamic";
+
+// GET /api/internships/[id]/applicants - fetch applicants for an internship with pagination
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -20,10 +22,20 @@ export async function GET(
 
     await connectToDatabase();
     const internshipId = params.id;
+    const { searchParams } = new URL(request.url);
 
-    const applications = await Application.find({ internshipId })
-      .populate("studentId", "name email stream institution designation isVerified")
-      .sort({ createdAt: -1 });
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const skip = (page - 1) * limit;
+
+    const [total, applications] = await Promise.all([
+      Application.countDocuments({ internshipId }),
+      Application.find({ internshipId })
+        .populate("studentId", "name email stream institution designation isVerified")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
 
     // Enrich with portfolio & evaluation ratings
     const enriched = await Promise.all(
@@ -37,22 +49,37 @@ export async function GET(
 
         return {
           ...app.toObject(),
-          portfolio: portfolio ? {
-            verifiedSkills: portfolio.verifiedSkills,
-            certificates: portfolio.certificates,
-            projects: portfolio.projects,
-          } : null,
+          portfolio: portfolio
+            ? {
+                verifiedSkills: portfolio.verifiedSkills,
+                certificates: portfolio.certificates,
+                projects: portfolio.projects,
+              }
+            : null,
           evaluations,
-          skillAssessment: lastAssessment ? {
-            score: lastAssessment.score,
-            percentage: lastAssessment.percentage,
-            gapAnalysis: lastAssessment.gapAnalysis,
-          } : null,
+          skillAssessment: lastAssessment
+            ? {
+                score: lastAssessment.score,
+                percentage: lastAssessment.percentage,
+                gapAnalysis: lastAssessment.gapAnalysis,
+              }
+            : null,
         };
       })
     );
 
-    return NextResponse.json({ applicants: enriched });
+    const totalPages = Math.ceil(total / limit);
+
+    return NextResponse.json({
+      applicants: enriched,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    });
   } catch (error: any) {
     console.error("Fetch applicants error:", error);
     return NextResponse.json({ error: "Failed to fetch applicants" }, { status: 500 });
@@ -71,13 +98,17 @@ export async function PATCH(
     }
 
     await connectToDatabase();
-    const body = await request.json();
-    const { applicationId, status, feedbackNote } = body;
+    const rawBody = await request.json();
 
-    const validation = ApplicationStatusSchema.safeParse({ status, feedbackNote });
+    const validation = ApplicationStatusSchema.safeParse(rawBody);
     if (!validation.success) {
-      return NextResponse.json({ error: "Invalid status update" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Validation failed", details: validation.error.format() },
+        { status: 400 }
+      );
     }
+
+    const { applicationId, status, feedbackNote } = validation.data;
 
     const application = await Application.findById(applicationId);
     if (!application) {

@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IQuizAnswer {
   questionId: string;
@@ -30,11 +30,12 @@ export interface ISkillAssessment extends Document {
 
 const SkillAssessmentSchema = new Schema<ISkillAssessment>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     stream: {
       type: String,
       required: true,
       enum: ["Ayurveda", "Yoga", "Unani", "Siddha", "Homeopathy"],
+      index: true,
     },
     score: { type: Number, required: true },
     totalQuestions: { type: Number, required: true },
@@ -57,6 +58,9 @@ const SkillAssessmentSchema = new Schema<ISkillAssessment>(
   },
   { timestamps: true }
 );
+
+SkillAssessmentSchema.index({ studentId: 1, stream: 1, createdAt: -1 });
+SkillAssessmentSchema.index({ studentId: 1, createdAt: -1 });
 
 export const SkillAssessment: Model<ISkillAssessment> =
   mongoose.models.SkillAssessment ||

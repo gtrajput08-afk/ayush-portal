@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IVerifiedSkill {
   name: string;
@@ -39,7 +39,7 @@ export interface IDigitalPortfolio extends Document {
 
 const DigitalPortfolioSchema = new Schema<IDigitalPortfolio>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },
     headline: { type: String, default: "Aspiring AYUSH Practitioner & Researcher" },
     bio: { type: String, default: "Passionate about traditional healthcare integration and evidence-based clinical practices." },
     verifiedSkills: [
@@ -89,6 +89,8 @@ const DigitalPortfolioSchema = new Schema<IDigitalPortfolio>(
   },
   { timestamps: true }
 );
+
+DigitalPortfolioSchema.index({ studentId: 1 }, { unique: true });
 
 export const DigitalPortfolio: Model<IDigitalPortfolio> =
   mongoose.models.DigitalPortfolio ||

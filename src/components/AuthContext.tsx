@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ export interface UserSession {
   mentorType?: "internal" | "external";
   institution?: string;
   designation?: string;
+  isDemo?: boolean;
 }
 
 interface AuthContextType {
@@ -30,6 +31,16 @@ const AuthContext = createContext<AuthContextType>({
   switchUser: async () => {},
 });
 
+const DEMO_EMAILS = [
+  "ayurveda.student@ayush.edu.in",
+  "yoga.scholar@ayush.edu.in",
+  "unani.researcher@ayush.edu.in",
+  "prof.sharma.internal@ayush.edu.in",
+  "dr.menon.external@ayush.edu.in",
+  "dabur.industry@ayush-pharma.com",
+  "himalaya.talent@ayush-pharma.com",
+];
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           if (data.user) {
+            const isDemo = DEMO_EMAILS.includes(data.user.email?.toLowerCase());
             setUser({
               id: data.user._id,
               name: data.user.name,
@@ -51,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               mentorType: data.user.mentorType,
               institution: data.user.institution,
               designation: data.user.designation,
+              isDemo,
             });
           }
         }
@@ -65,7 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = (userData: UserSession) => {
-    setUser(userData);
+    const isDemo = DEMO_EMAILS.includes(userData.email?.toLowerCase());
+    setUser({ ...userData, isDemo });
     if (userData.role === "student") {
       router.push("/student");
     } else if (userData.role === "academician") {
@@ -103,6 +117,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, switchUser }}>
+      {user?.isDemo && (
+        <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white text-xs font-semibold py-1.5 px-4 text-center sticky top-0 z-[60] flex items-center justify-center space-x-2 shadow-md">
+          <span>⚠️ <strong>Demo Sandbox Session:</strong> You are browsing as verified demo user ({user.name} - {user.role.toUpperCase()}).</span>
+          <span className="hidden sm:inline bg-white/20 text-white px-2 py-0.5 rounded text-[10px] uppercase font-bold">Isolated Sandbox</span>
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   );

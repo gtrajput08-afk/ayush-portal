@@ -1,9 +1,11 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { CandidateEvaluation } from "@/models/CandidateEvaluation";
 import { User } from "@/models/User";
 import { CandidateEvaluationSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,18 +31,33 @@ export async function POST(request: NextRequest) {
   try {
     const authUser = getAuthUser(request);
     if (!authUser || (authUser.role !== "academician" && authUser.role !== "industry")) {
-      return NextResponse.json({ error: "Unauthorized. Mentor evaluation privilege required." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Unauthorized. Mentor evaluation privilege required." },
+        { status: 403 }
+      );
     }
 
     await connectToDatabase();
-    const body = await request.json();
+    const rawBody = await request.json();
 
-    const validation = CandidateEvaluationSchema.safeParse(body);
+    const validation = CandidateEvaluationSchema.safeParse(rawBody);
     if (!validation.success) {
-      return NextResponse.json({ error: "Validation failed", details: validation.error.format() }, { status: 400 });
+      return NextResponse.json(
+        { error: "Validation failed", details: validation.error.format() },
+        { status: 400 }
+      );
     }
 
-    const { studentId, problemSolving, communication, curiosity, practicalInstincts, hiddenGemsNotes, projectsBuiltReview, overallVerdict } = validation.data;
+    const {
+      studentId,
+      problemSolving,
+      communication,
+      curiosity,
+      practicalInstincts,
+      hiddenGemsNotes,
+      projectsBuiltReview,
+      overallVerdict,
+    } = validation.data;
 
     const student = await User.findById(studentId);
     if (!student || student.role !== "student") {
@@ -60,10 +77,13 @@ export async function POST(request: NextRequest) {
       overallVerdict,
     });
 
-    return NextResponse.json({
-      message: "Candidate qualitative evaluation saved successfully!",
-      evaluation,
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        message: "Candidate qualitative evaluation saved successfully!",
+        evaluation,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error("Submit evaluation error:", error);
     return NextResponse.json({ error: "Failed to save evaluation" }, { status: 500 });

@@ -1,13 +1,34 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { User } from "@/models/User";
 import { DigitalPortfolio } from "@/models/DigitalPortfolio";
 import { SignupSchema } from "@/lib/validations";
 import { signToken } from "@/lib/jwt";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import bcrypt from "bcryptjs";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request.headers);
+    const rateLimit = checkRateLimit(`signup:${clientIp}`, 5, 15 * 60 * 1000);
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many signup attempts from this IP. Please try again after ${rateLimit.retryAfterSeconds} seconds.`,
+          retryAfter: rateLimit.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": rateLimit.retryAfterSeconds.toString(),
+          },
+        }
+      );
+    }
+
     await connectToDatabase();
     const body = await request.json();
 
@@ -19,7 +40,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, role, stream, mentorType, institution, designation } = validation.data;
+    const { name, email, password, role, stream, mentorType, institution, designation } =
+      validation.data;
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -29,6 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Password Hashing with Bcrypt (Salt rounds = 10)
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
@@ -38,7 +61,7 @@ export async function POST(request: NextRequest) {
       passwordHash,
       role,
       stream: role === "student" ? stream : undefined,
-      mentorType: (role === "academician" || role === "industry") ? mentorType : undefined,
+      mentorType: role === "academician" || role === "industry" ? mentorType : undefined,
       institution: institution || "",
       designation: designation || "",
       isVerified: true,
@@ -64,7 +87,7 @@ export async function POST(request: NextRequest) {
             level: "Beginner",
             verifiedBy: "Ayush Skill Assessment Engine",
             badge: "Bronze",
-          }
+          },
         ],
         certificates: [
           {
@@ -73,7 +96,7 @@ export async function POST(request: NextRequest) {
             issueDate: "2025-11-15",
             credentialUrl: "https://ayush.gov.in/verify/AYU-CERT-2025",
             verificationStatus: "Verified",
-          }
+          },
         ],
         projects: [
           {
@@ -81,8 +104,8 @@ export async function POST(request: NextRequest) {
             description: "Documented classical preparation methods and clinical indications.",
             stream: stream || "Ayurveda",
             status: "Completed",
-          }
-        ]
+          },
+        ],
       });
     }
 

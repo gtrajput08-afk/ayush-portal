@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IFdpAndResearch extends Document {
   _id: mongoose.Types.ObjectId;
@@ -17,11 +17,12 @@ export interface IFdpAndResearch extends Document {
 
 const FdpAndResearchSchema = new Schema<IFdpAndResearch>(
   {
-    postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     type: {
       type: String,
       required: true,
       enum: ["FDP", "Research Project", "Consultancy"],
+      index: true,
     },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
@@ -30,6 +31,7 @@ const FdpAndResearchSchema = new Schema<IFdpAndResearch>(
       required: true,
       enum: ["Ayurveda", "Yoga", "Unani", "Siddha", "Homeopathy", "All"],
       default: "All",
+      index: true,
     },
     eligibility: { type: String, default: "AYUSH Faculty / Researchers / Industry Collaborators" },
     fundingAmount: { type: String, default: "Institutional / Ministry Grant" },
@@ -38,10 +40,14 @@ const FdpAndResearchSchema = new Schema<IFdpAndResearch>(
       type: String,
       enum: ["Open", "In Progress", "Completed"],
       default: "Open",
+      index: true,
     },
   },
   { timestamps: true }
 );
+
+FdpAndResearchSchema.index({ type: 1, stream: 1, status: 1 });
+FdpAndResearchSchema.index({ status: 1, createdAt: -1 });
 
 export const FdpAndResearch: Model<IFdpAndResearch> =
   mongoose.models.FdpAndResearch ||

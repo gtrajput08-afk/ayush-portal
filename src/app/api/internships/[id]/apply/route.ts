@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Application } from "@/models/Application";
 import { Internship } from "@/models/Internship";
+import { ApplicationCreateSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(
   request: NextRequest,
@@ -12,7 +15,7 @@ export async function POST(
     const authUser = getAuthUser(request);
     if (!authUser || authUser.role !== "student") {
       return NextResponse.json(
-        { error: "Only student accounts can apply for internships." },
+        { error: "Only authenticated student accounts can apply for internships." },
         { status: 403 }
       );
     }
@@ -37,8 +40,16 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
-    const coverNote = body.coverNote || "I am keen to contribute my clinical and academic AYUSH skills to this position.";
+    const rawBody = await request.json().catch(() => ({}));
+    const validation = ApplicationCreateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { coverNote } = validation.data;
 
     const application = await Application.create({
       studentId: authUser.userId,
@@ -48,8 +59,8 @@ export async function POST(
       mentorFeedback: [
         {
           authorId: authUser.userId,
-          authorName: "System",
-          authorRole: "System Admin",
+          authorName: "System Verification",
+          authorRole: "AYUSH Assessment Portal",
           comment: "Application submitted and queued for mentor review.",
           createdAt: new Date(),
         },

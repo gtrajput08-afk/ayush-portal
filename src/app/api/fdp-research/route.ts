@@ -1,8 +1,10 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { FdpAndResearch } from "@/models/FdpAndResearch";
 import { FdpCreateSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,17 +13,37 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     const stream = searchParams.get("stream");
 
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const skip = (page - 1) * limit;
+
     const filter: any = {};
     if (type && type !== "All") filter.type = type;
     if (stream && stream !== "All") {
       filter.$or = [{ stream }, { stream: "All" }];
     }
 
-    const items = await FdpAndResearch.find(filter)
-      .populate("postedBy", "name email role mentorType institution")
-      .sort({ createdAt: -1 });
+    const [total, items] = await Promise.all([
+      FdpAndResearch.countDocuments(filter),
+      FdpAndResearch.find(filter)
+        .populate("postedBy", "name email role mentorType institution")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
 
-    return NextResponse.json({ items });
+    const totalPages = Math.ceil(total / limit);
+
+    return NextResponse.json({
+      items,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    });
   } catch (error: any) {
     console.error("Fetch FDP error:", error);
     return NextResponse.json({ error: "Failed to fetch FDP/Research opportunities" }, { status: 500 });
@@ -32,15 +54,21 @@ export async function POST(request: NextRequest) {
   try {
     const authUser = getAuthUser(request);
     if (!authUser || (authUser.role !== "academician" && authUser.role !== "industry")) {
-      return NextResponse.json({ error: "Unauthorized. Only academicians or industry can post FDP/Research." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Unauthorized. Only academicians or industry can post FDP/Research." },
+        { status: 403 }
+      );
     }
 
     await connectToDatabase();
-    const body = await request.json();
+    const rawBody = await request.json();
 
-    const validation = FdpCreateSchema.safeParse(body);
+    const validation = FdpCreateSchema.safeParse(rawBody);
     if (!validation.success) {
-      return NextResponse.json({ error: "Validation failed", details: validation.error.format() }, { status: 400 });
+      return NextResponse.json(
+        { error: "Validation failed", details: validation.error.format() },
+        { status: 400 }
+      );
     }
 
     const item = await FdpAndResearch.create({

@@ -1,10 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Internship } from "@/models/Internship";
 import { InternshipCreateSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
 
-// GET /api/internships - list all or filter by stream / search / location
+export const dynamic = "force-dynamic";
+
+// GET /api/internships - list all or filter by stream / search / location with pagination
 export async function GET(request: NextRequest) {
   try {
     await connectToDatabase();
@@ -13,6 +15,11 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get("query");
     const state = searchParams.get("state");
     const status = searchParams.get("status") || "Active";
+
+    // Pagination parameters (default: 20 per page)
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const skip = (page - 1) * limit;
 
     const filter: any = { status };
 
@@ -37,11 +44,27 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const internships = await Internship.find(filter)
-      .populate("postedBy", "name email role mentorType institution")
-      .sort({ createdAt: -1 });
+    const [total, internships] = await Promise.all([
+      Internship.countDocuments(filter),
+      Internship.find(filter)
+        .populate("postedBy", "name email role mentorType institution")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
 
-    return NextResponse.json({ internships });
+    const totalPages = Math.ceil(total / limit);
+
+    return NextResponse.json({
+      internships,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    });
   } catch (error: any) {
     console.error("Fetch internships error:", error);
     return NextResponse.json({ error: "Failed to fetch internships" }, { status: 500 });

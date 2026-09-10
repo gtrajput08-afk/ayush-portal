@@ -1,8 +1,11 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { DigitalPortfolio } from "@/models/DigitalPortfolio";
 import { Application } from "@/models/Application";
+import { PortfolioUpdateSchema } from "@/lib/validations";
 import { getAuthUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,8 +50,17 @@ export async function PUT(request: NextRequest) {
     }
 
     await connectToDatabase();
-    const body = await request.json();
-    const { headline, bio, projects, certificates } = body;
+    const rawBody = await request.json();
+
+    const validation = PortfolioUpdateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: validation.error.format() },
+        { status: 400 }
+      );
+    }
+
+    const { headline, bio, projects, certificates } = validation.data;
 
     const portfolio = await DigitalPortfolio.findOneAndUpdate(
       { studentId: authUser.userId },

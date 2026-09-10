@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IInternship extends Document {
   _id: mongoose.Types.ObjectId;
@@ -22,7 +22,7 @@ export interface IInternship extends Document {
 
 const InternshipSchema = new Schema<IInternship>(
   {
-    postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    postedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     requiredSkills: [{ type: String }],
@@ -30,10 +30,11 @@ const InternshipSchema = new Schema<IInternship>(
       type: String,
       required: true,
       enum: ["Ayurveda", "Yoga", "Unani", "Siddha", "Homeopathy", "All"],
+      index: true,
     },
     location: {
-      state: { type: String, required: true },
-      district: { type: String, required: true },
+      state: { type: String, required: true, index: true },
+      district: { type: String, required: true, index: true },
     },
     stipend: { type: String, default: "Negotiable / Stipend Provided" },
     duration: { type: String, default: "3 Months" },
@@ -47,10 +48,16 @@ const InternshipSchema = new Schema<IInternship>(
       type: String,
       enum: ["Active", "Closed"],
       default: "Active",
+      index: true,
     },
   },
   { timestamps: true }
 );
+
+// Compound Indexes for fast internship querying & filtering
+InternshipSchema.index({ stream: 1, status: 1, createdAt: -1 });
+InternshipSchema.index({ "location.state": 1, "location.district": 1 });
+InternshipSchema.index({ status: 1, createdAt: -1 });
 
 export const Internship: Model<IInternship> =
   mongoose.models.Internship || mongoose.model<IInternship>("Internship", InternshipSchema);

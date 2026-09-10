@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ICandidateEvaluation extends Document {
   _id: mongoose.Types.ObjectId;
@@ -18,8 +18,8 @@ export interface ICandidateEvaluation extends Document {
 
 const CandidateEvaluationSchema = new Schema<ICandidateEvaluation>(
   {
-    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    evaluatorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    studentId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    evaluatorId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     mentorType: {
       type: String,
       required: true,
@@ -39,6 +39,9 @@ const CandidateEvaluationSchema = new Schema<ICandidateEvaluation>(
   },
   { timestamps: true }
 );
+
+CandidateEvaluationSchema.index({ studentId: 1, evaluatorId: 1 });
+CandidateEvaluationSchema.index({ studentId: 1, createdAt: -1 });
 
 export const CandidateEvaluation: Model<ICandidateEvaluation> =
   mongoose.models.CandidateEvaluation ||
