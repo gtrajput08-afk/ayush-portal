@@ -1,8 +1,10 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { SkillAssessment } from "@/models/SkillAssessment";
 import { Application } from "@/models/Application";
 import { getAuthUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {

@@ -25,11 +25,9 @@ import {
   Heart
 } from "lucide-react";
 import { useAuth } from "@/components/AuthContext";
-import { useLanguage } from "@/components/LanguageContext";
 
 export default function LandingPage() {
   const { user } = useAuth();
-  const { t } = useLanguage();
   const [selectedStream, setSelectedStream] = useState<string>("Ayurveda");
   const [activeSlide, setActiveSlide] = useState<number>(0);
   const [autoPlay, setAutoPlay] = useState<boolean>(true);
